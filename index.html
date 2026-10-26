@@ -40,7 +40,7 @@ table.t{width:100%;border-collapse:collapse}
 .hint{color:var(--mut);font-size:12px;text-align:center;margin-top:14px}
 body.meet .app{grid-template-columns:1fr}body.meet aside{display:none}
 @media (max-width:760px){.app{grid-template-columns:1fr;height:auto}aside{max-height:40vh}main{padding:16px}.row{grid-template-columns:1fr 100px}.row .track{grid-column:1/-1;grid-row:2}}
-@media print{body{background:#fff}aside,.tools,.hint{display:none}.app{display:block;height:auto}main{padding:0;overflow:visible}.card{break-inside:avoid}}
+@media print{body{background:#fff}aside,.tools,.hint,.tabs{display:none}.app{display:block;height:auto}main{padding:0;overflow:visible}.card{break-inside:avoid}}
 .up{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 .up[hidden],.app[hidden]{display:none}
 .drop{background:var(--card);border:2px dashed var(--line);border-radius:20px;padding:40px 32px;max-width:520px;text-align:center}
@@ -49,6 +49,14 @@ body.meet .app{grid-template-columns:1fr}body.meet aside{display:none}
 button.prim{background:var(--acc);color:#fff;border-color:var(--acc);font-size:16px;padding:12px 22px}
 .priv{font-size:12px}.err{color:var(--bad);font-weight:600;min-height:1em}
 .leg{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--mut)}.item small{white-space:normal;text-align:right;max-width:110px}.cfg{display:flex;align-items:center;justify-content:space-between;margin:0 12px;font-size:13px;color:var(--mut)}.cfg input{width:72px;margin:0;padding:6px 8px;font-size:14px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}.tab{padding:8px 14px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;cursor:pointer;font:inherit;font-size:14px}.tab:hover{border-color:var(--acc)}.tab.on{background:var(--acc);border-color:var(--acc);color:#fff}.tab.add{border-style:dashed;color:var(--mut)}
+.ch{width:100%;height:auto;display:block}.ch .ax{font-size:11px;fill:var(--mut)}.ch .val{font-size:12px;font-weight:700}
+.evotop{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}.evotop label{font-size:13px;color:var(--mut)}
+select{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;max-width:100%}
+aside select{margin:0 12px 8px}
+.scroll{overflow-x:auto}.evot th.c,.evot td.c{width:auto;min-width:64px}.evot td{font-size:15px}.evot tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+@media (max-width:600px){.evot th,.evot td{padding:9px 4px}.evot td{font-size:14px}.evot th.c,.evot td.c{min-width:44px}.evotop label{display:block;width:100%}.evotop select{width:100%;margin-top:4px}}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:10;max-width:90vw;background:var(--card);color:var(--bad);border:1px solid var(--bad);border-radius:12px;padding:10px 16px;font-size:14px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.18)}.toast[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -56,20 +64,24 @@ button.prim{background:var(--acc);color:#fff;border-color:var(--acc);font-size:1
  <div class="drop" id="drop">
   <h1>Boletim da Turma</h1>
   <p>Carregue o <b>mapão</b> (.xlsx) para ver as notas e faltas de cada aluno.</p>
+  <p class="n">Para acompanhar a evolução, escolha as planilhas de vários bimestres da mesma turma (uma por bimestre). Você também pode adicionar outras depois.</p>
   <button class="b prim" id="pick">Escolher planilha</button>
   <p class="n">ou arraste o arquivo para cá</p>
   <p class="n priv">🔒 A planilha é lida apenas no seu navegador. Nada dela é enviado nem guardado: ao fechar ou recarregar a página, tudo some.</p>
   <p class="err" id="err"></p>
-  <input type="file" id="file" accept=".xlsx,.xls,.xlsm,.ods" hidden>
+  <input type="file" id="file" accept=".xlsx,.xls,.xlsm,.ods" multiple hidden>
  </div>
 </div>
+<div id="toast" class="toast" hidden></div>
 <div class="app" id="app" hidden>
 <aside>
  <h1 id="ttl"></h1><div class="sub" id="sub"></div>
+ <select id="turma" hidden></select>
  <input id="q" placeholder="Buscar aluno…" autocomplete="off">
  <div id="list"></div>
  <label class="cfg">Nota mínima <input id="pass" type="number" min="0" step="0.5" value="5"></label>
- <button class="b" id="novo" style="margin:8px 12px 12px">Carregar outra planilha</button>
+ <button class="b" id="add" style="margin:8px 12px 0">Adicionar planilha</button>
+ <button class="b" id="novo" style="margin:8px 12px 12px">Limpar tudo</button>
 </aside>
 <main><div class="wrap" id="view"></div></main>
 </div>
@@ -194,28 +206,174 @@ const ativo=a=>/^ativo/i.test(a.sit)||a.sit==='';
 const med=a=>avg(a.d.map(d=>num(d.m)).filter(x=>x!==null));
 const status=a=>{if(!ativo(a))return 'var(--mut)';const m=med(a);const baixa=a.d.some(d=>num(d.m)!==null&&num(d.m)<PASS);const f=a.fpa!==null?a.fpa:a.fp;return baixa||(f!==null&&f<FREQ_MIN)?'var(--bad)':((m!==null&&m<PASS*1.3)||(f!==null&&f<85))?'var(--warn)':'var(--ok)'};
 
-function load(d){
-  DATA=d;subs=d.subs;alunos=d.alunos;legenda=d.legenda;
-  recalc();
-  sel=Math.max(0,alunos.findIndex(ativo));
+/* ---------- estado: várias planilhas (bimestres) por turma ---------- */
+const T={};
+let tk=null,pi=0,sk=null,discSel='__media';
+const cur=()=>T[tk];
+const per=()=>cur().periods[pi];
+const atual=()=>per().data.idx.get(sk)||null;
+
+function periodoInfo(meta,fname){
+  const t=txt(meta['Tipo Fechamento']);
+  let o=null;
+  const m=t.match(/(\d)\s*[ºo°]?\s*bim/i);
+  if(m)o=+m[1];
+  else{const n=norm(t);const w=[['PRIMEIRO',1],['SEGUNDO',2],['TERCEIRO',3],['QUARTO',4]].find(x=>n.includes(x[0]));if(w)o=w[1]}
+  const nome=t||fname;
+  return o?{ord:o,label:o+'º Bimestre',curto:o+'º Bim'}:{ord:null,label:nome,curto:nome.length>12?nome.slice(0,11)+'…':nome};
+}
+function prep(d){
+  d.idx=new Map(d.alunos.map(a=>[norm(a.nome),a]));
+  d.subIdx=new Map(d.subs.map((s,i)=>[norm(s.nome),i]));
+  d.classAvg=d.subs.map((_,i)=>avg(d.alunos.filter(ativo).map(a=>num(a.d[i].m)).filter(x=>x!==null)));
+  d.turmaMed=avg(d.classAvg.filter(x=>x!==null));
+}
+function addData(d,fname){
+  prep(d);
+  const m=d.meta,key=(m['Turma']||'Turma')+'|'+(m['Ano Letivo']||'');
+  const info=periodoInfo(m,fname);
+  const t=T[key]||(T[key]={key:key,meta:m,periods:[]});
+  const ord=info.ord!==null?info.ord:90+t.periods.filter(x=>x.ord>=90).length;
+  const p={ord:ord,label:info.label,curto:info.curto,data:d};
+  const i=t.periods.findIndex(x=>x.ord===ord);
+  if(i>=0)t.periods[i]=p;else t.periods.push(p);
+  t.periods.sort((a,b)=>a.ord-b.ord);
+  t.meta=m;
+  return {key:key,ord:ord};
+}
+function setGlobals(){const d=per().data;DATA=d;subs=d.subs;alunos=d.alunos;legenda=d.legenda;classAvg=d.classAvg;turmaMed=d.turmaMed}
+function roster(){
+  const seen=new Map();
+  cur().periods.slice().reverse().forEach(p=>p.data.alunos.forEach(a=>{const k=norm(a.nome);if(!seen.has(k))seen.set(k,{k:k,nome:a.nome})}));
+  return [...seen.values()].sort((x,y)=>x.nome.localeCompare(y.nome,'pt'));
+}
+function todasDisc(){
+  const seen=new Set(),o=[];
+  cur().periods.forEach(p=>p.data.subs.forEach(s=>{const k=norm(s.nome);if(!seen.has(k)){seen.add(k);o.push({k:k,nome:s.nome})}}));
+  return o;
+}
+function mostrar(key,ord){
+  tk=key;const t=cur();
+  pi=ord==null?t.periods.length-1:Math.max(0,t.periods.findIndex(p=>p.ord===ord));
+  setGlobals();
+  const r=roster();
+  if(!sk||!r.some(x=>x.k===sk)){const a=alunos.find(ativo);sk=a?norm(a.nome):r[0].k}
   $('up').hidden=true;$('app').hidden=false;
+  fillTurma();$('q').value='';renderHeader();renderList();render();
+}
+function fillTurma(){
+  const keys=Object.keys(T),s=$('turma');
+  s.hidden=keys.length<2;
+  s.innerHTML=keys.map(k=>`<option value="${esc(k)}" ${k===tk?'selected':''}>${esc(T[k].meta['Turma']?T[k].meta['Turma'].replace(/^\d+\s*-\s*/,''):'Turma')}</option>`).join('');
+}
+function renderHeader(){
   const m=DATA.meta;
   $('ttl').textContent=(m['Turma']||'Turma').replace(/^\d+\s*-\s*/,'');
-  $('sub').textContent=[m['Escola'],alunos.filter(ativo).length+' alunos ativos',m['Tipo Fechamento']].filter(Boolean).join(' · ');
-  $('q').value='';renderList();render();
-}
-function recalc(){
-  classAvg=subs.map((_,i)=>avg(alunos.filter(ativo).map(a=>num(a.d[i].m)).filter(x=>x!==null)));
-  const c=classAvg.filter(x=>x!==null);turmaMed=avg(c);
+  $('sub').textContent=[m['Escola'],alunos.filter(ativo).length+' alunos ativos',per().label].filter(Boolean).join(' · ');
 }
 function renderList(){
   const q=$('q').value.trim().toLowerCase();
-  $('list').innerHTML=alunos.map((a,i)=>({a:a,i:i})).filter(o=>o.a.nome.toLowerCase().includes(q)).map(o=>
-   `<button class="item ${o.i===sel?'sel':''}" data-i="${o.i}"><span class="dot" style="background:${status(o.a)}"></span>${esc(o.a.nome)}${ativo(o.a)?'':`<small>${esc(o.a.sit)}</small>`}</button>`).join('');
+  $('list').innerHTML=roster().filter(o=>o.nome.toLowerCase().includes(q)).map(o=>{
+    const a=per().data.idx.get(o.k);
+    return `<button class="item ${o.k===sk?'sel':''}" data-k="${esc(o.k)}"><span class="dot" style="background:${a?status(a):'var(--mut)'}"></span>${esc(o.nome)}${!a?'<small>sem dados</small>':ativo(a)?'':`<small>${esc(a.sit)}</small>`}</button>`}).join('');
 }
-function go(d){sel=(sel+d+alunos.length)%alunos.length;renderList();render();const s=document.querySelector('.item.sel');if(s)s.scrollIntoView({block:'nearest'})}
+function go(d){const r=roster(),i=r.findIndex(x=>x.k===sk);sk=r[(i+d+r.length)%r.length].k;renderList();render();const s=document.querySelector('.item.sel');if(s)s.scrollIntoView({block:'nearest'})}
+
+/* ---------- gráficos (SVG) ---------- */
+const CW=()=>Math.max(300,Math.min(640,($('view').clientWidth||640)-40));
+function linhas(labels,series,ymax,pass,aria){
+  const W=CW(),H=250,L=34,R=18,Tp=20,B=32,n=labels.length;
+  const x=i=>n===1?(L+W-R)/2:L+(W-L-R)*i/(n-1);
+  const y=v=>Tp+(H-Tp-B)*(1-v/ymax);
+  const step=ymax<=10?2:Math.ceil(ymax/5);
+  let g='';
+  for(let v=0;v<=ymax;v+=step)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}</text>`;
+  if(pass!=null&&pass>0&&pass<=ymax)g+=`<line x1="${L}" x2="${W-R}" y1="${y(pass)}" y2="${y(pass)}" style="stroke:var(--bad)" stroke-dasharray="4 4" opacity=".6"/>`;
+  labels.forEach((l,i)=>{g+=`<text x="${x(i)}" y="${H-10}" text-anchor="middle" class="ax">${esc(l)}</text>`});
+  series.forEach(s=>{
+    let d='',prev=false;
+    s.vals.forEach((v,i)=>{if(v===null){prev=false;return}d+=(prev?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' ';prev=true});
+    if(d)g+=`<path d="${d}" fill="none" style="stroke:${s.cor}" stroke-width="${s.w}" ${s.dash?'stroke-dasharray="6 5"':''} stroke-linejoin="round" stroke-linecap="round"/>`;
+    s.vals.forEach((v,i)=>{
+      if(v===null)return;
+      g+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${s.r}" style="fill:${s.cor}"/>`;
+      if(s.lab)g+=`<text x="${x(i).toFixed(1)}" y="${(y(v)-10).toFixed(1)}" text-anchor="middle" class="val" style="fill:${s.cor}">${fmt(v)}</text>`;
+    });
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="ch" role="img" aria-label="${esc(aria)}">${g}</svg>`;
+}
+function barras(labels,vals,aria){
+  const W=CW(),H=200,L=34,R=18,Tp=24,B=32,n=labels.length;
+  const mx=Math.max(4,...vals.filter(v=>v!==null));
+  const ymax=Math.ceil(mx*1.1),step=Math.ceil(ymax/4);
+  const y=v=>Tp+(H-Tp-B)*(1-v/ymax);
+  const slot=(W-L-R)/n,bw=Math.min(70,slot*.5);
+  let g='';
+  for(let v=0;v<=ymax;v+=step)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}</text>`;
+  labels.forEach((l,i)=>{
+    const cx=L+slot*(i+.5),v=vals[i];
+    g+=`<text x="${cx}" y="${H-10}" text-anchor="middle" class="ax">${esc(l)}</text>`;
+    if(v===null){g+=`<text x="${cx}" y="${y(0)-6}" text-anchor="middle" class="val" style="fill:var(--mut)">—</text>`;return}
+    g+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,y(0)-y(v)).toFixed(1)}" rx="4" style="fill:var(--warn)"/><text x="${cx}" y="${(y(v)-6).toFixed(1)}" text-anchor="middle" class="val" style="fill:var(--ink)">${v}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="ch" role="img" aria-label="${esc(aria)}">${g}</svg>`;
+}
+const valor=(p,a,disc)=>{if(!a)return null;if(disc==='__media')return med(a);const si=p.data.subIdx.get(disc);return si===undefined?null:num(a.d[si].m)};
+const valTurma=(p,disc)=>{if(disc==='__media')return p.data.turmaMed;const si=p.data.subIdx.get(disc);return si===undefined?null:p.data.classAvg[si]};
+
+function evoHtml(){
+  const ps=cur().periods;
+  if(ps.length<2)return `<div class="card evo"><h3>Evolução do aluno</h3><p class="n">Para acompanhar a evolução, adicione a planilha de outro bimestre desta mesma turma.</p><button class="b" data-add="1">Adicionar planilha de outro bimestre</button></div>`;
+  const labels=ps.map(p=>p.curto),discs=todasDisc();
+  const disc=discSel==='__media'||discs.some(x=>x.k===discSel)?discSel:'__media';
+  const nomeDisc=disc==='__media'?'Média geral':discs.find(x=>x.k===disc).nome;
+  const alu=ps.map(p=>valor(p,p.data.idx.get(sk),disc));
+  const tur=ps.map(p=>valTurma(p,disc));
+  const fal=ps.map(p=>{const x=p.data.idx.get(sk);return x&&x.tf!=null?x.tf:null});
+  const nn=alu.filter(v=>v!==null);
+  const ymax=Math.max(10,Math.ceil(Math.max(0,...nn,...tur.filter(v=>v!==null))));
+  let resumo='';
+  if(nn.length>=2){const d=nn[nn.length-1]-nn[0];resumo=`${esc(nomeDisc)}: de <b>${fmt(nn[0])}</b> para <b>${fmt(nn[nn.length-1])}</b> <span style="color:${d>0?'var(--ok)':d<0?'var(--bad)':'var(--mut)'}">(${d>0?'+':d<0?'−':''}${fmt(Math.abs(d))})</span>`}
+  const grafNota=linhas(labels,[
+    {vals:tur,cor:'var(--mut)',w:2,r:3.5,dash:true,lab:false},
+    {vals:alu,cor:'var(--acc)',w:3.5,r:5,dash:false,lab:true}],ymax,PASS,
+    `Evolução de ${nomeDisc} por bimestre: `+labels.map((l,i)=>l+' '+(alu[i]===null?'sem nota':fmt(alu[i]))).join(', '));
+  const grafFal=barras(labels,fal,'Faltas por bimestre: '+labels.map((l,i)=>l+' '+(fal[i]===null?'sem dados':fal[i])).join(', '));
+  const ult=ps.length-1;
+  const rows=discs.map(d=>{
+    const cells=ps.map(p=>{
+      const x=p.data.idx.get(sk),si=p.data.subIdx.get(d.k);
+      if(!x||si===undefined)return {t:'—'};
+      const raw=x.d[si].m,v=num(raw);
+      return v!==null?{t:raw,v:v}:{t:raw&&raw!=='-'?raw:'—'};
+    });
+    const a=cells[ult].v,b=cells[ult-1].v;
+    let dl='';
+    if(a!==undefined&&b!==undefined){const x=a-b;dl=x>0?`<span style="color:var(--ok)">▲ +${fmt(x)}</span>`:x<0?`<span style="color:var(--bad)">▼ −${fmt(-x)}</span>`:'<span style="color:var(--mut)">=</span>'}
+    return `<tr><td>${esc(d.nome)}</td>${cells.map(c=>`<td class="c" style="${c.v!==undefined?'color:'+cor(c.v)+';font-weight:700':'color:var(--mut)'}">${esc(c.t)}</td>`).join('')}<td class="c">${dl}</td></tr>`}).join('');
+  const mediaRow=`<tr class="tot"><td>Média geral</td>${ps.map((p,i)=>{const v=valor(p,p.data.idx.get(sk),'__media');return `<td class="c" style="${v!==null?'color:'+cor(v):'color:var(--mut)'}">${v===null?'—':fmt(v)}</td>`}).join('')}<td class="c"></td></tr>`;
+  const falRow=`<tr class="tot"><td>Faltas no bimestre</td>${fal.map(v=>`<td class="c">${v===null?'—':v}</td>`).join('')}<td class="c"></td></tr>`;
+  return `<div class="card evo"><h3>Evolução do aluno</h3>
+   <div class="evotop"><label>Disciplina <select id="disc"><option value="__media" ${disc==='__media'?'selected':''}>Média geral</option>${discs.map(d=>`<option value="${esc(d.k)}" ${d.k===disc?'selected':''}>${esc(d.nome)}</option>`).join('')}</select></label><div class="n">${resumo}</div></div>
+   ${grafNota}
+   <div class="leg"><span><b style="color:var(--acc)">●</b> Aluno</span><span><b style="color:var(--mut)">●</b> Média da turma (tracejado)</span><span><b style="color:var(--bad)">┄</b> Nota mínima (${esc(fmt(PASS))})</span></div>
+   <h3 style="margin-top:22px">Faltas por bimestre</h3>${grafFal}
+   <h3 style="margin-top:22px">Notas em cada bimestre</h3>
+   <div class="scroll"><table class="t evot"><thead><tr><th>Disciplina</th>${ps.map(p=>`<th class="c">${esc(p.curto)}</th>`).join('')}<th class="c">Variação</th></tr></thead><tbody>${rows}${mediaRow}${falRow}</tbody></table></div>
+   <div class="n" style="margin-top:8px">Variação compara o último bimestre com o anterior.</div></div>`;
+}
+function drawEvo(){const e=$('evo');if(e)e.innerHTML=evoHtml()}
+
+/* ---------- tela do aluno ---------- */
 function render(){
-  const a=alunos[sel],m=med(a);
+  const a=atual(),ent=roster().find(x=>x.k===sk)||{nome:''};
+  const tabs=`<div class="tabs">${cur().periods.map((p,i)=>`<button class="tab ${i===pi?'on':''}" data-p="${i}">${esc(p.label)}</button>`).join('')}<button class="tab add" data-add="1">+ Adicionar bimestre</button></div>`;
+  const tools=`<div class="tools"><button class="b" id="prev" title="Aluno anterior">←</button><button class="b" id="next" title="Próximo aluno">→</button><button class="b" id="meet">${document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'}</button><button class="b" id="print">Imprimir</button></div>`;
+  if(!a){
+    $('view').innerHTML=`<div class="top"><div><h2>${esc(ent.nome)}</h2></div>${tools}</div>${tabs}<div class="card alert"><b>Sem dados neste bimestre</b><div class="n">${esc(ent.nome)} não consta na planilha do ${esc(per().label)}.</div></div><div id="evo" style="margin-top:14px">${evoHtml()}</div>`;
+    bindTools();document.title='Boletim — '+ent.nome;return;
+  }
+  const m=med(a);
   const baixas=a.d.map((d,i)=>({n:subs[i].nome,v:num(d.m)})).filter(x=>x.v!==null&&x.v<PASS);
   const codes=new Set();
   const rows=a.d.map((d,i)=>{
@@ -233,41 +391,73 @@ function render(){
   else if(baixas.length||(fa!==null&&fa<FREQ_MIN)||(fb!==null&&fb<FREQ_MIN)) msg=`<div class="card alert"><b>Pontos de atenção</b><ul>${baixas.map(x=>`<li>${esc(x.n)}: nota <b>${esc(fmt(x.v))}</b> (abaixo de ${esc(fmt(PASS))})</li>`).join('')}${fa!==null&&fa<FREQ_MIN?`<li>Frequência anual de <b>${fmtPct(fa)}</b> (mínimo exigido: ${FREQ_MIN}%)</li>`:''}${fb!==null&&fb<FREQ_MIN?`<li>Frequência no período de <b>${fmtPct(fb)}</b></li>`:''}</ul></div>`;
   else msg=`<div class="card alert ok"><b>Sem pontos de atenção</b><div class="n">Todas as notas a partir de ${esc(fmt(PASS))} e frequência acima de ${FREQ_MIN}%.</div></div>`;
   const legTxt=[...codes].filter(c=>legenda[c]).map(c=>`<span><b>${esc(c)}</b> ${esc(legenda[c].replace(/^[^\s]+\s*/,''))}</span>`).join('');
-  const meta=[a.sit&&`<span class="badge">${esc(a.sit)}</span>`,DATA.meta['Tipo Fechamento'],DATA.meta['Ano Letivo']].filter(Boolean).map(x=>x.startsWith('<span')?x:esc(x)).join(' · ');
+  const meta=[a.sit&&`<span class="badge">${esc(a.sit)}</span>`,esc(per().label),esc(DATA.meta['Ano Letivo']||'')].filter(Boolean).join(' · ');
   const stats=[
    `<div class="card stat"><div class="l">Média das notas</div><div class="v" style="color:${m===null?'var(--mut)':cor(m)}">${m===null?'—':fmt(m)}</div><div class="n">Média da turma: ${turmaMed===null?'—':fmt(turmaMed)}</div></div>`,
    fb!==null?`<div class="card stat"><div class="l">Frequência no período</div><div class="v" style="color:${corF(fb)}">${fmtPct(fb)}</div><div class="n">${a.tf} falta${a.tf==1?'':'s'} no período</div></div>`:`<div class="card stat"><div class="l">Faltas no período</div><div class="v">${a.tf}</div></div>`,
    fa!==null?`<div class="card stat"><div class="l">Frequência no ano</div><div class="v" style="color:${corF(fa)}">${fmtPct(fa)}</div><div class="n">${a.fta===null?'':a.fta+' faltas no ano'}</div></div>`:''
   ].join('');
   $('view').innerHTML=`
-  <div class="top"><div><h2>${esc(a.nome)}</h2><div class="meta">${meta}</div></div>
-   <div class="tools"><button class="b" id="prev" title="Aluno anterior">←</button><button class="b" id="next" title="Próximo aluno">→</button><button class="b" id="meet">${document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'}</button><button class="b" id="print">Imprimir</button></div></div>
+  <div class="top"><div><h2>${esc(a.nome)}</h2><div class="meta">${meta}</div></div>${tools}</div>
+  ${tabs}
   <div class="stats">${stats}</div>
   ${msg}
   <div class="card" style="margin-top:14px"><h3>Nota e faltas por disciplina</h3><table class="t"><thead><tr><th>Disciplina</th><th class="c">Nota</th><th class="c">Faltas</th></tr></thead><tbody>${rows}</tbody></table>
    <div class="leg"><span><b style="color:var(--ok)">■</b> ${esc(fmt(bom()))} ou mais</span><span><b style="color:var(--warn)">■</b> ${esc(fmt(PASS))} a ${esc(fmt(bom()-0.1))}</span><span><b style="color:var(--bad)">■</b> abaixo de ${esc(fmt(PASS))}</span><span>— sem nota lançada</span>${legTxt}</div></div>
+  <div id="evo" style="margin-top:14px">${evoHtml()}</div>
   <div class="hint">Use ← → do teclado para trocar de aluno</div>`;
+  bindTools();
+  document.title='Boletim — '+a.nome;
+}
+function bindTools(){
   $('prev').onclick=()=>go(-1);$('next').onclick=()=>go(1);
   $('meet').onclick=()=>{document.body.classList.toggle('meet');$('meet').textContent=document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'};
   $('print').onclick=()=>window.print();
-  document.title='Boletim — '+a.nome;
 }
-async function handle(f){
-  $('err').textContent='';
-  if(!f)return;
-  try{load(parse(await f.arrayBuffer()))}catch(e){$('err').textContent=e.message||'Não consegui ler esta planilha.'}
+
+/* ---------- carregar planilhas ---------- */
+function aviso(m){
+  $('err').textContent=m;
+  const t=$('toast');t.textContent=m;t.hidden=!m||$('app').hidden;
+  clearTimeout(aviso.t);if(m)aviso.t=setTimeout(()=>{t.hidden=true},8000);
+}
+async function handle(files){
+  aviso('');
+  const arr=[...(files||[])];if(!arr.length)return;
+  const erros=[];let ultimo=null;
+  for(const f of arr){
+    try{ultimo=addData(parse(await f.arrayBuffer()),f.name)}
+    catch(e){erros.push((arr.length>1?f.name+': ':'')+(e.message||'Não consegui ler esta planilha.'))}
+  }
+  if(ultimo)mostrar(ultimo.key,arr.length===1?ultimo.ord:null);
+  if(erros.length)aviso(erros.join(' | '));
+}
+function limpar(){
+  Object.keys(T).forEach(k=>delete T[k]);
+  tk=null;sk=null;pi=0;discSel='__media';DATA=alunos=null;
+  document.body.classList.remove('meet');$('view').innerHTML='';$('list').innerHTML='';
+  document.title='Boletim da Turma';$('app').hidden=true;$('up').hidden=false;
 }
 $('pick').onclick=()=>$('file').click();
-$('file').onchange=e=>{handle(e.target.files[0]);e.target.value=''};
+$('add').onclick=()=>$('file').click();
+$('file').onchange=e=>{handle(e.target.files);e.target.value=''};
 const dz=$('drop');
 ['dragover','dragenter'].forEach(ev=>addEventListener(ev,e=>{e.preventDefault();dz.classList.add('on')}));
 ['dragleave','drop'].forEach(ev=>addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('on')}));
-addEventListener('drop',e=>handle(e.dataTransfer.files[0]));
-$('novo').onclick=()=>{DATA=alunos=null;document.body.classList.remove('meet');$('view').innerHTML='';$('list').innerHTML='';document.title='Boletim da Turma';$('app').hidden=true;$('up').hidden=false};
-$('list').onclick=e=>{const b=e.target.closest('.item');if(b){sel=+b.dataset.i;renderList();render()}};
+addEventListener('drop',e=>handle(e.dataTransfer.files));
+$('novo').onclick=()=>{if(confirm('Remover todas as planilhas carregadas?'))limpar()};
+$('turma').onchange=e=>{sk=null;mostrar(e.target.value,null)};
+$('list').onclick=e=>{const b=e.target.closest('.item');if(b){sk=b.dataset.k;renderList();render()}};
+$('view').onclick=e=>{
+  if(e.target.closest('[data-add]')){$('file').click();return}
+  const b=e.target.closest('.tab[data-p]');
+  if(b){pi=+b.dataset.p;setGlobals();renderHeader();renderList();render()}
+};
+$('view').onchange=e=>{if(e.target.id==='disc'){discSel=e.target.value;drawEvo()}};
 $('q').oninput=renderList;
-$('pass').onchange=()=>{const n=num($('pass').value);if(n!==null&&n>=0){PASS=n;if(alunos){renderList();render()}}};
-addEventListener('keydown',e=>{if(!alunos||e.target.tagName==='INPUT')return;if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)});
+$('pass').onchange=()=>{const n=num($('pass').value);if(n!==null&&n>=0){PASS=n;if(tk){renderList();render()}}};
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(tk)drawEvo()},150)});
+addEventListener('keydown',e=>{if(!tk||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)});
 </script>
 <script data-goatcounter="https://notasmapao.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body></html>

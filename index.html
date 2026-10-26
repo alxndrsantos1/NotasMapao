@@ -48,6 +48,7 @@ body.meet .app{grid-template-columns:1fr}body.meet aside{display:none}
 .drop h1{margin:0 0 8px;font-size:26px}.drop p{margin:10px 0}
 button.prim{background:var(--acc);color:#fff;border-color:var(--acc);font-size:16px;padding:12px 22px}
 .priv{font-size:12px}.err{color:var(--bad);font-weight:600;min-height:1em}
+.leg{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--mut)}.item small{white-space:normal;text-align:right;max-width:110px}.cfg{display:flex;align-items:center;justify-content:space-between;margin:0 12px;font-size:13px;color:var(--mut)}.cfg input{width:72px;margin:0;padding:6px 8px;font-size:14px}
 </style>
 </head>
 <body>
@@ -59,7 +60,7 @@ button.prim{background:var(--acc);color:#fff;border-color:var(--acc);font-size:1
   <p class="n">ou arraste o arquivo para cá</p>
   <p class="n priv">🔒 O arquivo é lido apenas no seu navegador. Nada é enviado nem guardado: ao fechar ou recarregar a página, tudo some.</p>
   <p class="err" id="err"></p>
-  <input type="file" id="file" accept=".xlsx,.xls" hidden>
+  <input type="file" id="file" accept=".xlsx,.xls,.xlsm,.ods" hidden>
  </div>
 </div>
 <div class="app" id="app" hidden>
@@ -67,6 +68,7 @@ button.prim{background:var(--acc);color:#fff;border-color:var(--acc);font-size:1
  <h1 id="ttl"></h1><div class="sub" id="sub"></div>
  <input id="q" placeholder="Buscar aluno…" autocomplete="off">
  <div id="list"></div>
+ <label class="cfg">Nota mínima <input id="pass" type="number" min="0" step="0.5" value="5"></label>
  <button class="b" id="novo" style="margin:8px 12px 12px">Carregar outra planilha</button>
 </aside>
 <main><div class="wrap" id="view"></div></main>
@@ -97,82 +99,153 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
 </script>
 <script>
-const NOMES={"BIOLOGIA":"Biologia","EDUCACAO FISICA":"Educação Física","FISICA":"Física","GEOGRAFIA":"Geografia","HISTORIA":"História","LINGUA INGLESA":"Língua Inglesa","LINGUA PORTUGUESA":"Língua Portuguesa","MATEMATICA":"Matemática","QUIMICA":"Química","SOCIOLOGIA":"Sociologia","FILOSOFIA":"Filosofia","ARTE":"Arte","CARREIRA E COMPETENCIAS PARA O MERCADO DE TRABALHO":"Carreira e Competências p/ Mercado de Trabalho","LOGICA E LINGUAGEM DE PROGRAMACAO":"Lógica e Linguagem de Programação","PROCESSOS DE DESENVOLVIMENTO DE SOFTWARE E METODOLOGIAS AGEIS":"Processos de Desenv. de Software e Metodologias Ágeis","REDES DE COMPUTADORES E SEGURANCA DA INFORMACAO NA NUVEM":"Redes de Computadores e Segurança da Informação"};
-const PASS=5;
+const FREQ_MIN=75;
+let PASS=5;
+const PEQUENAS=new Set(['DE','DA','DO','DAS','DOS','E','PARA','EM','NA','NO','NAS','NOS','A','O','COM','AO','AOS','POR']);
+const ACENTOS={MATEMATICA:'Matemática',FISICA:'Física',QUIMICA:'Química',HISTORIA:'História',LINGUA:'Língua',EDUCACAO:'Educação',LOGICA:'Lógica',PROGRAMACAO:'Programação',SEGURANCA:'Segurança',INFORMACAO:'Informação',COMPETENCIAS:'Competências',CIENCIAS:'Ciências',INGLES:'Inglês',INFORMATICA:'Informática',ADMINISTRACAO:'Administração',AGEIS:'Ágeis',ORIENTACAO:'Orientação',INTELIGENCIA:'Inteligência',COMUNICACAO:'Comunicação',ETICA:'Ética',PRATICA:'Prática',PRATICAS:'Práticas',RELACOES:'Relações',ANALISE:'Análise',TECNICO:'Técnico',TECNICA:'Técnica',TECNICAS:'Técnicas',GEOMETRIA:'Geometria',ESTATISTICA:'Estatística',MODELAGEM:'Modelagem',ELETRONICA:'Eletrônica',MECANICA:'Mecânica',CONTABILIDADE:'Contabilidade',ECONOMIA:'Economia',PRODUCAO:'Produção',GESTAO:'Gestão',NEGOCIOS:'Negócios',TRANSVERSAIS:'Transversais',OPTATIVA:'Optativa',ELETIVA:'Eletiva',APLICACOES:'Aplicações',APLICACAO:'Aplicação',AVANCADO:'Avançado',AVANCADA:'Avançada',BASICO:'Básico',BASICA:'Básica',ESPANHOL:'Espanhol',ESPANHOLA:'Espanhola',MUSICA:'Música',ARTES:'Artes',ARTE:'Arte',CIDADANIA:'Cidadania',VIDA:'Vida',PROJETO:'Projeto',REDACAO:'Redação',LITERATURA:'Literatura',ROBOTICA:'Robótica',MATEMATICAS:'Matemáticas',NATUREZA:'Natureza',TECNOLOGIAS:'Tecnologias',TECNOLOGIA:'Tecnologia',HUMANAS:'Humanas',SOCIAIS:'Sociais',APLICADAS:'Aplicadas',LINGUAGENS:'Linguagens',CODIGOS:'Códigos',SUAS:'suas',NUVEM:'Nuvem'};
 const $=id=>document.getElementById(id);
-const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const num=x=>{const n=parseInt(x);return isNaN(n)?null:n};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z ]/g,'').replace(/\s+/g,' ').toUpperCase().trim();
+const lab=v=>String(v==null?'':v).toLowerCase().replace(/\s+/g,'');
+const cap=w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
+function bonito(s){
+  return String(s).trim().split(/\s+/).map((w,i)=>{
+    const k=norm(w);
+    if(/\d/.test(w)||/^[IVX]+$/.test(w))return w;
+    if(i>0&&PEQUENAS.has(k))return w.toLowerCase();
+    return ACENTOS[k]||cap(w);
+  }).join(' ');
+}
+const txt=v=>v==null?'':String(v).trim();
+const num=x=>{if(x==null||x==='')return null;const n=parseFloat(String(x).replace(',','.'));return isNaN(n)||!isFinite(n)?null:n};
+const cnt=x=>{const n=num(x);return n===null?null:n};
+const pctNum=v=>{const n=num(v);if(n===null)return null;return typeof v==='number'&&n<=1?n*100:n};
 const avg=v=>v.length?v.reduce((x,y)=>x+y)/v.length:null;
-const fmt=n=>n.toFixed(1).replace('.',',');
-const cor=n=>n>=7?'var(--ok)':n>=PASS?'var(--warn)':'var(--bad)';
-const corF=p=>p>=90?'var(--ok)':p>=75?'var(--warn)':'var(--bad)';
-const pct=s=>parseInt(s)||0;
-let DATA,alunos,subs,classAvg,turmaMed,sel;
+const fmt=n=>(Math.round(n*10)/10).toString().replace('.',',');
+const fmtPct=p=>p===null?'—':Math.round(p)+'%';
+const bom=()=>PASS*1.4;
+const cor=n=>n>=bom()?'var(--ok)':n>=PASS?'var(--warn)':'var(--bad)';
+const corF=p=>p===null?'var(--mut)':p>=90?'var(--ok)':p>=FREQ_MIN?'var(--warn)':'var(--bad)';
+let DATA,alunos,subs,legenda,classAvg,turmaMed,sel;
 
 function parse(buf){
   const wb=XLSX.read(buf,{type:'array'});
-  const g=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null,raw:true});
-  const hi=g.findIndex(r=>r&&String(r[0]||'').trim().toUpperCase()==='ALUNO');
-  if(hi<0)throw new Error('Não encontrei a coluna "ALUNO". Esta planilha é o mapão de notas?');
+  let g=null,hi=-1;
+  for(const n of wb.SheetNames){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,raw:true});
+    const i=rows.findIndex(r=>r&&txt(r[0]).toUpperCase()==='ALUNO');
+    if(i>=0){g=rows;hi=i;break}
+  }
+  if(!g)throw new Error('Não encontrei a coluna "ALUNO". Esta planilha é o mapão de notas?');
   const h=g[hi],h2=g[hi+1]||[];
+  const width=Math.max(h.length,h2.length);
+  const sitCol=norm(h[1]||'').startsWith('SITUACAO')?1:-1;
+  const c0=sitCol===1?2:1;
+  const hasSub=h2.some((v,c)=>c>=c0&&['m','f','ac'].includes(lab(v)));
   const meta={};
-  g.slice(0,hi).forEach(r=>{if(r&&r[0]&&r[1]!=null)meta[String(r[0]).replace(':','').trim()]=String(r[1]).trim()});
-  const subCols=[];let totCol=-1;
-  h.forEach((v,c)=>{if(c<2||v==null)return;const t=String(v).trim();if(t.toUpperCase()==='TOTAL')totCol=c;else subCols.push({c,nome:t.split('\n')[0].trim()})});
-  if(totCol<0)totCol=h2.findIndex(v=>String(v).trim()==='TF');
-  if(!subCols.length)throw new Error('Não encontrei as disciplinas.');
-  const out=[];
-  for(let r=hi+2;r<g.length;r++){
-    const row=g[r];if(!row||!String(row[0]||'').trim()||!String(row[1]||'').trim())break;
-    out.push({nome:String(row[0]).trim(),sit:String(row[1]).trim(),
-      d:subCols.map(s=>[row[s.c+1],row[s.c+2],row[s.c+3]]),
-      tf:row[totCol]==null?0:row[totCol],fp:row[totCol+1]==null?'0%':row[totCol+1],fta:row[totCol+2]==null?0:row[totCol+2],fpa:row[totCol+3]==null?'0%':row[totCol+3]});
+  g.slice(0,hi).forEach(r=>{if(r&&r[0]&&r[1]!=null)meta[txt(r[0]).replace(':','')]=txt(r[1])});
+  const blocks=[];let tot=null,cur=null;
+  for(let c=c0;c<width;c++){
+    const t=txt(h[c]);
+    if(t){
+      if(t.toUpperCase()==='TOTAL'){tot={cols:{}};cur=tot}
+      else{cur={nome:t.split('\n')[0].trim(),cols:{},c0:c,c1:c};blocks.push(cur)}
+    }
+    if(!cur)continue;
+    cur.c1=c;
+    const l=hasSub?lab(h2[c]):(cur===tot?'':'m');
+    if(cur===tot){
+      if(l==='tf')cur.cols.tf=c;
+      else if(l.startsWith('fre')&&l.includes('an'))cur.cols.fpa=c;
+      else if(l.startsWith('fre'))cur.cols.fp=c;
+      else if(l.startsWith('ft')&&l.includes('an'))cur.cols.fta=c;
+    }else{
+      if(l==='m')cur.cols.m=c;else if(l==='f')cur.cols.f=c;else if(l==='ac')cur.cols.ac=c;
+    }
+  }
+  const sb=blocks.filter(b=>b.cols.m!==undefined||b.cols.f!==undefined);
+  if(!sb.length)throw new Error('Não encontrei as disciplinas.');
+  const out=[],aulas=new Map(),leg={};
+  let inLeg=false;
+  for(let r=hi+(hasSub?2:1);r<g.length;r++){
+    const row=g[r]||[];
+    const name=txt(row[0]);
+    if(inLeg){const m=name.match(/^([^\s-]{1,4})\s*-\s*(.+)$/);if(m)leg[m[1].toUpperCase()]=m[2].trim();continue}
+    if(/^legenda/i.test(name)){inLeg=true;continue}
+    if(!name||/^aulas\s+dadas/i.test(name)){
+      row.forEach((v,c)=>{const m=typeof v==='string'&&v.match(/aulas\s+dadas:?\s*(\d+)/i);if(m){const b=sb.find(b=>c>=b.c0&&c<=b.c1);if(b)aulas.set(b,+m[1])}});
+      continue;
+    }
+    const sit=sitCol>=0?txt(row[sitCol]):'';
+    const d=sb.map(b=>({m:txt(row[b.cols.m])||null,f:cnt(row[b.cols.f]),ac:cnt(row[b.cols.ac])}));
+    if(!sit&&d.every(x=>x.m===null&&x.f===null))continue;
+    const T=tot?tot.cols:{};
+    const soma=d.reduce((s,x)=>s+(x.f||0),0);
+    out.push({nome:name,sit:sit,d:d,
+      tf:T.tf!==undefined&&num(row[T.tf])!==null?num(row[T.tf]):soma,
+      fp:T.fp!==undefined?pctNum(row[T.fp]):null,
+      fta:T.fta!==undefined?num(row[T.fta]):null,
+      fpa:T.fpa!==undefined?pctNum(row[T.fpa]):null});
   }
   if(!out.length)throw new Error('Nenhum aluno encontrado.');
-  return {meta:meta,subs:subCols.map(s=>NOMES[norm(s.nome)]||s.nome),alunos:out};
+  return {meta:meta,subs:sb.map(b=>({nome:bonito(b.nome),aulas:aulas.get(b)||null})),alunos:out,legenda:leg};
 }
-const ativo=a=>a.sit==='Ativo';
-const med=a=>avg(a.d.map(d=>num(d[0])).filter(x=>x!==null));
-const status=a=>{if(!ativo(a))return 'var(--mut)';const m=med(a),f=pct(a.fpa);const baixa=a.d.some(d=>num(d[0])!==null&&num(d[0])<PASS);return baixa||f<75?'var(--bad)':((m!==null&&m<6.5)||f<85)?'var(--warn)':'var(--ok)'};
+const ativo=a=>/^ativo/i.test(a.sit)||a.sit==='';
+const med=a=>avg(a.d.map(d=>num(d.m)).filter(x=>x!==null));
+const status=a=>{if(!ativo(a))return 'var(--mut)';const m=med(a);const baixa=a.d.some(d=>num(d.m)!==null&&num(d.m)<PASS);const f=a.fpa!==null?a.fpa:a.fp;return baixa||(f!==null&&f<FREQ_MIN)?'var(--bad)':((m!==null&&m<PASS*1.3)||(f!==null&&f<85))?'var(--warn)':'var(--ok)'};
 
 function load(d){
-  DATA=d;subs=d.subs;alunos=d.alunos;
-  classAvg=subs.map((_,i)=>avg(alunos.filter(ativo).map(a=>num(a.d[i][0])).filter(x=>x!==null)));
-  turmaMed=avg(classAvg.filter(x=>x!==null));
+  DATA=d;subs=d.subs;alunos=d.alunos;legenda=d.legenda;
+  recalc();
   sel=Math.max(0,alunos.findIndex(ativo));
   $('up').hidden=true;$('app').hidden=false;
   const m=DATA.meta;
   $('ttl').textContent=(m['Turma']||'Turma').replace(/^\d+\s*-\s*/,'');
-  $('sub').textContent=alunos.filter(ativo).length+' alunos ativos · '+(m['Tipo Fechamento']||'');
+  $('sub').textContent=[m['Escola'],alunos.filter(ativo).length+' alunos ativos',m['Tipo Fechamento']].filter(Boolean).join(' · ');
   $('q').value='';renderList();render();
+}
+function recalc(){
+  classAvg=subs.map((_,i)=>avg(alunos.filter(ativo).map(a=>num(a.d[i].m)).filter(x=>x!==null)));
+  const c=classAvg.filter(x=>x!==null);turmaMed=avg(c);
 }
 function renderList(){
   const q=$('q').value.trim().toLowerCase();
   $('list').innerHTML=alunos.map((a,i)=>({a:a,i:i})).filter(o=>o.a.nome.toLowerCase().includes(q)).map(o=>
-   `<button class="item ${o.i===sel?'sel':''}" data-i="${o.i}"><span class="dot" style="background:${status(o.a)}"></span>${esc(o.a.nome)}${ativo(o.a)?'':`<small>${esc(o.a.sit.split(' ')[0])}</small>`}</button>`).join('');
+   `<button class="item ${o.i===sel?'sel':''}" data-i="${o.i}"><span class="dot" style="background:${status(o.a)}"></span>${esc(o.a.nome)}${ativo(o.a)?'':`<small>${esc(o.a.sit)}</small>`}</button>`).join('');
 }
 function go(d){sel=(sel+d+alunos.length)%alunos.length;renderList();render();const s=document.querySelector('.item.sel');if(s)s.scrollIntoView({block:'nearest'})}
 function render(){
-  const a=alunos[sel],m=med(a),fb=pct(a.fp),fa=pct(a.fpa);
-  const baixas=a.d.map((d,i)=>({n:subs[i],v:num(d[0])})).filter(x=>x.v!==null&&x.v<PASS);
-  const rows=a.d.map((d,i)=>{const v=num(d[0]);const f=num(d[1])||0,ac=num(d[2])||0;
-   return `<tr><td>${esc(subs[i])}</td><td class="c nota" style="color:${v!==null?cor(v):'var(--mut)'}">${v===null?'—':v}</td><td class="c falta ${f?'':'z'}">${f}${ac?`<small>${ac} compensada${ac==1?'':'s'}</small>`:''}</td></tr>`}).join('');
+  const a=alunos[sel],m=med(a);
+  const baixas=a.d.map((d,i)=>({n:subs[i].nome,v:num(d.m)})).filter(x=>x.v!==null&&x.v<PASS);
+  const codes=new Set();
+  const rows=a.d.map((d,i)=>{
+    const v=num(d.m),raw=d.m;
+    let nota;
+    if(v!==null)nota=`<td class="c nota" style="color:${cor(v)}">${esc(raw)}</td>`;
+    else if(raw!==null&&raw!=='-'){codes.add(raw.toUpperCase());nota=`<td class="c nota" title="${esc(legenda[raw.toUpperCase()]||'')}">${esc(raw)}</td>`}
+    else nota=`<td class="c nota" style="color:var(--mut)">—</td>`;
+    const f=d.f,ac=d.ac||0,au=subs[i].aulas;
+    const notas=[ac?`${ac} compensada${ac==1?'':'s'}`:'',au&&f!==null?`de ${au} aulas`:''].filter(Boolean).join(' · ');
+    return `<tr><td>${esc(subs[i].nome)}</td>${nota}<td class="c falta ${f?'':'z'}">${f===null?'—':f}${notas?`<small>${notas}</small>`:''}</td></tr>`}).join('');
+  const fb=a.fp,fa=a.fpa;
   let msg;
   if(!ativo(a)) msg=`<div class="card alert"><b>Situação: ${esc(a.sit)}</b><div class="n">Dados conforme registro do mapão.</div></div>`;
-  else if(baixas.length||fa<75||fb<75) msg=`<div class="card alert"><b>Pontos de atenção</b><ul>${baixas.map(x=>`<li>${esc(x.n)}: menção <b>${x.v}</b> (abaixo de ${PASS})</li>`).join('')}${fa<75?`<li>Frequência anual de <b>${fa}%</b> (mínimo exigido: 75%)</li>`:''}${fb<75?`<li>Frequência no bimestre de <b>${fb}%</b></li>`:''}</ul></div>`;
-  else msg=`<div class="card alert ok"><b>Sem pontos de atenção</b><div class="n">Todas as menções a partir de ${PASS} e frequência acima de 75%.</div></div>`;
+  else if(baixas.length||(fa!==null&&fa<FREQ_MIN)||(fb!==null&&fb<FREQ_MIN)) msg=`<div class="card alert"><b>Pontos de atenção</b><ul>${baixas.map(x=>`<li>${esc(x.n)}: nota <b>${esc(fmt(x.v))}</b> (abaixo de ${esc(fmt(PASS))})</li>`).join('')}${fa!==null&&fa<FREQ_MIN?`<li>Frequência anual de <b>${fmtPct(fa)}</b> (mínimo exigido: ${FREQ_MIN}%)</li>`:''}${fb!==null&&fb<FREQ_MIN?`<li>Frequência no período de <b>${fmtPct(fb)}</b></li>`:''}</ul></div>`;
+  else msg=`<div class="card alert ok"><b>Sem pontos de atenção</b><div class="n">Todas as notas a partir de ${esc(fmt(PASS))} e frequência acima de ${FREQ_MIN}%.</div></div>`;
+  const legTxt=[...codes].filter(c=>legenda[c]).map(c=>`<span><b>${esc(c)}</b> ${esc(legenda[c].replace(/^[^\s]+\s*/,''))}</span>`).join('');
+  const meta=[a.sit&&`<span class="badge">${esc(a.sit)}</span>`,DATA.meta['Tipo Fechamento'],DATA.meta['Ano Letivo']].filter(Boolean).map(x=>x.startsWith('<span')?x:esc(x)).join(' · ');
+  const stats=[
+   `<div class="card stat"><div class="l">Média das notas</div><div class="v" style="color:${m===null?'var(--mut)':cor(m)}">${m===null?'—':fmt(m)}</div><div class="n">Média da turma: ${turmaMed===null?'—':fmt(turmaMed)}</div></div>`,
+   fb!==null?`<div class="card stat"><div class="l">Frequência no período</div><div class="v" style="color:${corF(fb)}">${fmtPct(fb)}</div><div class="n">${a.tf} falta${a.tf==1?'':'s'} no período</div></div>`:`<div class="card stat"><div class="l">Faltas no período</div><div class="v">${a.tf}</div></div>`,
+   fa!==null?`<div class="card stat"><div class="l">Frequência no ano</div><div class="v" style="color:${corF(fa)}">${fmtPct(fa)}</div><div class="n">${a.fta===null?'':a.fta+' faltas no ano'}</div></div>`:''
+  ].join('');
   $('view').innerHTML=`
-  <div class="top"><div><h2>${esc(a.nome)}</h2><div class="meta"><span class="badge">${esc(a.sit)}</span> · ${esc(DATA.meta['Tipo Fechamento']||'')} · ${esc(DATA.meta['Ano Letivo']||'')}</div></div>
+  <div class="top"><div><h2>${esc(a.nome)}</h2><div class="meta">${meta}</div></div>
    <div class="tools"><button class="b" id="prev" title="Aluno anterior">←</button><button class="b" id="next" title="Próximo aluno">→</button><button class="b" id="meet">${document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'}</button><button class="b" id="print">Imprimir</button></div></div>
-  <div class="stats">
-   <div class="card stat"><div class="l">Média das menções</div><div class="v" style="color:${m===null?'var(--mut)':cor(m)}">${m===null?'—':fmt(m)}</div><div class="n">Média da turma: ${turmaMed===null?'—':fmt(turmaMed)}</div></div>
-   <div class="card stat"><div class="l">Frequência no bimestre</div><div class="v" style="color:${corF(fb)}">${esc(a.fp)}</div><div class="n">${esc(a.tf)} falta${a.tf==1?'':'s'} no bimestre</div></div>
-   <div class="card stat"><div class="l">Frequência no ano</div><div class="v" style="color:${corF(fa)}">${esc(a.fpa)}</div><div class="n">${esc(a.fta)} faltas no ano</div></div>
-  </div>
+  <div class="stats">${stats}</div>
   ${msg}
-  <div class="card" style="margin-top:14px"><h3>Nota e faltas por disciplina</h3><table class="t"><thead><tr><th>Disciplina</th><th class="c">Nota (menção)</th><th class="c">Faltas</th></tr></thead><tbody>${rows}</tbody></table>
-   <div class="leg"><span><b style="color:var(--ok)">■</b> 7 a 10</span><span><b style="color:var(--warn)">■</b> 5 a 6</span><span><b style="color:var(--bad)">■</b> abaixo de 5</span><span>— sem nota lançada</span></div></div>
+  <div class="card" style="margin-top:14px"><h3>Nota e faltas por disciplina</h3><table class="t"><thead><tr><th>Disciplina</th><th class="c">Nota</th><th class="c">Faltas</th></tr></thead><tbody>${rows}</tbody></table>
+   <div class="leg"><span><b style="color:var(--ok)">■</b> ${esc(fmt(bom()))} ou mais</span><span><b style="color:var(--warn)">■</b> ${esc(fmt(PASS))} a ${esc(fmt(bom()-0.1))}</span><span><b style="color:var(--bad)">■</b> abaixo de ${esc(fmt(PASS))}</span><span>— sem nota lançada</span>${legTxt}</div></div>
   <div class="hint">Use ← → do teclado para trocar de aluno</div>`;
   $('prev').onclick=()=>go(-1);$('next').onclick=()=>go(1);
   $('meet').onclick=()=>{document.body.classList.toggle('meet');$('meet').textContent=document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'};
@@ -193,6 +266,7 @@ addEventListener('drop',e=>handle(e.dataTransfer.files[0]));
 $('novo').onclick=()=>{DATA=alunos=null;document.body.classList.remove('meet');$('view').innerHTML='';$('list').innerHTML='';document.title='Boletim da Turma';$('app').hidden=true;$('up').hidden=false};
 $('list').onclick=e=>{const b=e.target.closest('.item');if(b){sel=+b.dataset.i;renderList();render()}};
 $('q').oninput=renderList;
-addEventListener('keydown',e=>{if(!alunos||e.target.id==='q')return;if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)});
+$('pass').onchange=()=>{const n=num($('pass').value);if(n!==null&&n>=0){PASS=n;if(alunos){renderList();render()}}};
+addEventListener('keydown',e=>{if(!alunos||e.target.tagName==='INPUT')return;if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)});
 </script>
 </body></html>

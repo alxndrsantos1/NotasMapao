@@ -84,6 +84,12 @@ select{padding:8px 14px;border:1px solid var(--line);border-radius:99px;backgrou
 aside select{margin:0 12px 8px}
 .scroll{overflow-x:auto}.evot th.c,.evot td.c{width:auto;min-width:64px}.evot td{font-size:15px}.evot tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 @media (max-width:600px){.evot th,.evot td{padding:9px 4px}.evot td{font-size:14px}.evot th.c,.evot td.c{min-width:44px}.evotop label{display:block;width:100%}.evotop select{width:100%;margin-top:4px}}
+.cmodal{position:fixed;inset:0;z-index:40;background:rgba(15,23,42,.65);display:flex;align-items:center;justify-content:center;padding:16px}.cmodal[hidden]{display:none}
+.cbox{display:flex;flex-direction:column;align-items:center;gap:12px;max-width:100%;max-height:100%}
+.cbox img{max-width:min(100%,560px);max-height:calc(100vh - 110px);height:auto;width:auto;border-radius:24px;box-shadow:0 20px 50px rgba(0,0,0,.35);background:#fff}
+.cbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+body.cmodal-on{overflow:hidden}
+@media print{.cmodal,.toast{display:none!important}}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:30;max-width:90vw;background:#fff;color:var(--bad);border:1px solid #fecdd3;border-radius:20px;padding:10px 18px;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(15,23,42,.15)}.toast[hidden]{display:none}
 </style>
 </head>
@@ -110,6 +116,16 @@ aside select{margin:0 12px 8px}
  <div class="foot" style="border:0;margin:0;padding:0">Desenvolvido por <strong>Prof. Alexandre Santos</strong> · <a href="https://www.ferramentasdoprofessor.com.br/contato/">Contato</a></div>
 </div>
 <div id="toast" class="toast" hidden></div>
+<div id="cmodal" class="cmodal" hidden role="dialog" aria-modal="true" aria-label="Cartão do aluno">
+ <div class="cbox">
+  <img id="cimg" alt="Cartão do aluno com notas e faltas">
+  <div class="cbar">
+   <button class="b prim" id="csave">Salvar imagem</button>
+   <button class="b" id="cshare" hidden>Compartilhar</button>
+   <button class="b" id="cclose">Fechar</button>
+  </div>
+ </div>
+</div>
 <div class="app" id="app" hidden>
 <aside>
  <h1 id="ttl"></h1><div class="sub" id="sub"></div>
@@ -405,7 +421,7 @@ function drawEvo(){const e=$('evo');if(e)e.innerHTML=evoHtml()}
 function render(){
   const a=atual(),ent=roster().find(x=>x.k===sk)||{nome:''};
   const tabs=`<div class="tabs">${cur().periods.map((p,i)=>`<button class="tab ${i===pi?'on':''}" data-p="${i}">${esc(p.label)}</button>`).join('')}<button class="tab add" data-add="1">+ Adicionar bimestre</button></div>`;
-  const tools=`<div class="tools"><button class="b" id="prev" title="Aluno anterior">←</button><button class="b" id="next" title="Próximo aluno">→</button><button class="b" id="meet">${document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'}</button><button class="b" id="print">Imprimir</button></div>`;
+  const tools=`<div class="tools"><button class="b" id="prev" title="Aluno anterior">←</button><button class="b" id="next" title="Próximo aluno">→</button><button class="b prim" id="card" title="Gera uma imagem com as notas e faltas do aluno para salvar, enviar ou fotografar">Cartão para foto</button><button class="b" id="meet">${document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'}</button><button class="b" id="print">Imprimir</button></div>`;
   if(!a){
     $('view').innerHTML=`<div class="top"><div><h2>${esc(ent.nome)}</h2></div>${tools}</div>${tabs}<div class="card alert"><b>Sem dados neste bimestre</b><div class="n">${esc(ent.nome)} não consta na planilha do ${esc(per().label)}.</div></div><div id="evo" style="margin-top:14px">${evoHtml()}</div>`;
     bindTools();document.title='Boletim — '+ent.nome;return;
@@ -450,7 +466,151 @@ function bindTools(){
   $('prev').onclick=()=>go(-1);$('next').onclick=()=>go(1);
   $('meet').onclick=()=>{document.body.classList.toggle('meet');$('meet').textContent=document.body.classList.contains('meet')?'Mostrar lista':'Modo reunião'};
   $('print').onclick=()=>window.print();
+  $('card').onclick=abrirCartao;
 }
+
+/* ---------- cartão do aluno (imagem para foto / compartilhar) ---------- */
+const CH={ok:'#059669',warn:'#d97706',bad:'#e11d48',ink:'#0f172a',mut:'#475569',line:'#e2e8f0',soft:'#f1f5f9',acc:'#4f46e5',accbg:'#eef2ff'};
+const corHex=n=>n>=bom()?CH.ok:n>=PASS?CH.warn:CH.bad;
+const corFHex=p=>p===null?CH.mut:p>=90?CH.ok:p>=FREQ_MIN?CH.warn:CH.bad;
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function quebra(c,t,maxW){
+  const out=[];let cur='';
+  String(t).split(/\s+/).forEach(p=>{const test=cur?cur+' '+p:p;if(c.measureText(test).width>maxW&&cur){out.push(cur);cur=p}else cur=test});
+  if(cur)out.push(cur);return out;
+}
+function dadosCartao(a){
+  const ps=cur().periods,key=norm(a.nome);
+  const baixas=a.d.map((d,i)=>({n:subs[i].nome,v:num(d.m)})).filter(x=>x.v!==null&&x.v<PASS);
+  const avisos=[];
+  if(!ativo(a))avisos.push('Situação: '+a.sit);
+  else{
+    baixas.forEach(x=>avisos.push(x.n+': nota '+fmt(x.v)+' (abaixo de '+fmt(PASS)+')'));
+    if(a.fpa!==null&&a.fpa<FREQ_MIN)avisos.push('Frequência anual de '+fmtPct(a.fpa)+' (mínimo exigido: '+FREQ_MIN+'%)');
+    if(a.fp!==null&&a.fp<FREQ_MIN)avisos.push('Frequência no período de '+fmtPct(a.fp));
+  }
+  const evo=ps.length>=2?ps.map(p=>({l:p.curto,v:valor(p,p.data.idx.get(key),'__media')})):null;
+  return {a:a,m:med(a),avisos:avisos,evo:evo&&evo.some(x=>x.v!==null)?evo:null,
+    turma:(DATA.meta['Turma']||'').replace(/^\d+\s*-\s*/,''),escola:DATA.meta['Escola']||'',
+    periodo:per().label,ano:DATA.meta['Ano Letivo']||''};
+}
+function desenharCartao(c,D,dim){
+  const F='"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif',W=1080,cx=40,cw=W-80,ix=cx+56,iw=cw-112;
+  const a=D.a;
+  c.textBaseline='alphabetic';c.textAlign='left';
+  if(dim){
+    const g=c.createLinearGradient(0,0,W,dim.H);g.addColorStop(0,'#eef2ff');g.addColorStop(.5,'#ffffff');g.addColorStop(1,'#faf5ff');
+    c.fillStyle=g;c.fillRect(0,0,W,dim.H);
+  }
+  // topo
+  c.fillStyle=CH.acc;c.font='800 36px '+F;c.fillText('Notas Mapão',cx+8,92);
+  c.fillStyle=CH.mut;c.font='500 24px '+F;c.textAlign='right';
+  let esc=D.escola;while(esc&&c.measureText(esc).width>560)esc=esc.slice(0,-2);
+  c.fillText(esc===D.escola?esc:esc+'…',W-cx-8,92);c.textAlign='left';
+  const top=130;
+  if(dim){c.save();c.shadowColor='rgba(79,70,229,.12)';c.shadowBlur=40;c.shadowOffsetY=12;rr(c,cx,top,cw,dim.cardH,48);c.fillStyle='#fff';c.fill();c.restore();c.strokeStyle=CH.soft;c.lineWidth=2;rr(c,cx,top,cw,dim.cardH,48);c.stroke()}
+  let y=top+84;
+  // nome
+  c.fillStyle=CH.ink;c.font='800 54px '+F;
+  quebra(c,a.nome,iw).forEach(l=>{c.fillText(l,ix,y);y+=64});
+  y-=10;
+  c.fillStyle=CH.mut;c.font='500 25px '+F;
+  y+=34;quebra(c,D.turma,iw).forEach(l=>{c.fillText(l,ix,y);y+=34});
+  c.fillStyle=CH.acc;c.font='700 26px '+F;
+  c.fillText([D.periodo,D.ano].filter(Boolean).join(' · '),ix,y);
+  if(a.sit&&!ativo(a)){const t=a.sit;c.font='700 22px '+F;const w=c.measureText(t).width+32;c.fillStyle=CH.accbg;rr(c,ix+iw-w,y-28,w,40,20);c.fill();c.fillStyle=CH.acc;c.fillText(t,ix+iw-w+16,y);}
+  y+=44;
+  // indicadores
+  const st=[{l:'Média das notas',v:D.m===null?'—':fmt(D.m),c:D.m===null?CH.mut:corHex(D.m),s:''}];
+  if(a.fp!==null)st.push({l:'Frequência no período',v:fmtPct(a.fp),c:corFHex(a.fp),s:a.tf+(a.tf==1?' falta':' faltas')});
+  else st.push({l:'Faltas no período',v:String(a.tf),c:CH.ink,s:''});
+  if(a.fpa!==null)st.push({l:'Frequência no ano',v:fmtPct(a.fpa),c:corFHex(a.fpa),s:a.fta===null?'':a.fta+' faltas no ano'});
+  const gap=20,bw=(iw-gap*(st.length-1))/st.length,bh=156;
+  st.forEach((s,i)=>{
+    const bx=ix+i*(bw+gap);
+    c.fillStyle='#f8fafc';rr(c,bx,y,bw,bh,28);c.fill();c.strokeStyle=CH.line;c.lineWidth=2;rr(c,bx,y,bw,bh,28);c.stroke();
+    c.fillStyle=CH.mut;c.font='600 21px '+F;c.fillText(s.l,bx+22,y+38);
+    c.fillStyle=s.c;c.font='800 58px '+F;c.fillText(s.v,bx+22,y+104);
+    if(s.s){c.fillStyle=CH.mut;c.font='500 20px '+F;c.fillText(s.s,bx+22,y+138)}
+  });
+  y+=bh+54;
+  // tabela
+  c.fillStyle=CH.ink;c.font='800 30px '+F;c.fillText('Nota e faltas por disciplina',ix,y);y+=28;
+  const nx=ix+iw-190,fx=ix+iw-56;
+  c.fillStyle=CH.mut;c.font='700 20px '+F;c.textAlign='center';c.fillText('NOTA',nx,y+22);c.fillText('FALTAS',fx,y+22);c.textAlign='left';c.fillText('DISCIPLINA',ix,y+22);
+  y+=38;c.fillStyle=CH.line;c.fillRect(ix,y,iw,3);y+=3;
+  a.d.forEach((d,i)=>{
+    c.font='500 26px '+F;
+    const ls=quebra(c,subs[i].nome,iw-300).slice(0,2),rh=Math.max(66,ls.length*32+26);
+    c.fillStyle=CH.ink;ls.forEach((l,k)=>c.fillText(l,ix,y+(rh-ls.length*32)/2+26+k*32));
+    const v=num(d.m);c.textAlign='center';
+    c.font='800 38px '+F;c.fillStyle=v!==null?corHex(v):CH.mut;
+    c.fillText(d.m&&d.m!=='-'?d.m:'—',nx,y+rh/2+13);
+    const f=d.f;c.font=(f?'700':'400')+' 32px '+F;c.fillStyle=f?CH.ink:CH.mut;
+    c.fillText(f===null?'—':String(f),fx,y+rh/2+(subs[i].aulas&&f!==null?8:12));
+    if(subs[i].aulas&&f!==null){c.font='500 17px '+F;c.fillStyle=CH.mut;c.fillText('de '+subs[i].aulas,fx,y+rh/2+30)}
+    c.textAlign='left';
+    y+=rh;c.fillStyle=CH.soft;c.fillRect(ix,y,iw,2);
+  });
+  y+=44;
+  // pontos de atenção
+  const ok=!D.avisos.length;
+  c.font='500 24px '+F;
+  const linhas=ok?['Todas as notas a partir de '+fmt(PASS)+' e frequência acima de '+FREQ_MIN+'%.']:[].concat(...D.avisos.map(t=>quebra(c,'• '+t,iw-56)));
+  const ah=70+linhas.length*34+22;
+  c.fillStyle=ok?'#ecfdf5':'#fff1f2';rr(c,ix,y,iw,ah,28);c.fill();c.strokeStyle=ok?'#a7f3d0':'#fecdd3';c.lineWidth=2;rr(c,ix,y,iw,ah,28);c.stroke();
+  c.fillStyle=CH.ink;c.font='800 27px '+F;c.fillText(ok?'Sem pontos de atenção':'Pontos de atenção',ix+28,y+44);
+  c.font='500 24px '+F;linhas.forEach((l,k)=>c.fillText(l,ix+28,y+84+k*34));
+  y+=ah+46;
+  // evolução
+  if(D.evo){
+    c.fillStyle=CH.ink;c.font='800 30px '+F;c.fillText('Evolução da média',ix,y);y+=24;
+    const L=44,R=24,ch=250,n=D.evo.length,ymax=10;
+    const X=i=>n===1?ix+iw/2:ix+L+40+(iw-L-R-80)*i/(n-1),Y=v=>y+20+(ch-60)*(1-v/ymax);
+    c.font='500 19px '+F;c.fillStyle=CH.mut;c.textAlign='right';
+    [0,5,10].forEach(t=>{c.fillText(String(t),ix+L-10,Y(t)+6);c.fillStyle=CH.line;c.fillRect(ix+L,Y(t),iw-L-R,2);c.fillStyle=CH.mut});
+    c.textAlign='center';D.evo.forEach((e,i)=>c.fillText(e.l,X(i),y+ch-6));
+    let pen=false;c.strokeStyle=CH.acc;c.lineWidth=6;c.lineJoin='round';c.lineCap='round';c.beginPath();
+    D.evo.forEach((e,i)=>{if(e.v===null){pen=false;return}pen?c.lineTo(X(i),Y(e.v)):c.moveTo(X(i),Y(e.v));pen=true});c.stroke();
+    D.evo.forEach((e,i)=>{if(e.v===null)return;c.fillStyle=CH.acc;c.beginPath();c.arc(X(i),Y(e.v),10,0,Math.PI*2);c.fill();c.fillStyle='#fff';c.beginPath();c.arc(X(i),Y(e.v),4,0,Math.PI*2);c.fill();c.fillStyle=CH.acc;c.font='800 24px '+F;c.fillText(fmt(e.v),X(i),Y(e.v)-20)});
+    c.textAlign='left';y+=ch+30;
+  }
+  const cardBottom=y;
+  const cardH=cardBottom-top;
+  // rodapé
+  c.textAlign='center';c.fillStyle=CH.mut;c.font='500 22px '+F;
+  const agora=new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+  c.fillText('Gerado em '+agora+' · notas conforme o mapão do '+D.periodo,W/2,cardBottom+52);
+  c.fillStyle=CH.ink;c.font='600 22px '+F;c.fillText('Desenvolvido por Prof. Alexandre Santos · ferramentasdoprofessor.com.br',W/2,cardBottom+90);
+  c.textAlign='left';
+  return {H:cardBottom+130,cardH:cardH};
+}
+async function gerarCartaoPng(a){
+  try{await Promise.all(['800 40px "Plus Jakarta Sans"','700 30px "Plus Jakarta Sans"','500 26px "Plus Jakarta Sans"'].map(f=>document.fonts.load(f)))}catch(e){}
+  const D=dadosCartao(a);
+  const m=document.createElement('canvas');m.width=1080;m.height=10;
+  const dim=desenharCartao(m.getContext('2d'),D,null);
+  const c=document.createElement('canvas');c.width=1080;c.height=dim.H;
+  desenharCartao(c.getContext('2d'),D,dim);
+  return new Promise(res=>c.toBlob(b=>res(b),'image/png'));
+}
+let cartaoBlob=null,cartaoNome='cartao.png';
+async function abrirCartao(){
+  const a=atual();if(!a)return;
+  const bt=$('card');if(bt)bt.disabled=true;
+  try{
+    const blob=await gerarCartaoPng(a);
+    if(!blob)throw new Error('Não deu para gerar a imagem neste navegador.');
+    cartaoBlob=blob;
+    cartaoNome='cartao-'+norm(a.nome).toLowerCase().replace(/\s+/g,'-')+'-'+(per().curto||'bim').toLowerCase().replace(/[^a-z0-9]+/g,'')+'.png';
+    if($('cimg').src)URL.revokeObjectURL($('cimg').src);
+    $('cimg').src=URL.createObjectURL(blob);
+    $('cshare').hidden=!(navigator.canShare&&navigator.canShare({files:[new File([blob],cartaoNome,{type:'image/png'})]}));
+    $('cmodal').hidden=false;document.body.classList.add('cmodal-on');$('cclose').focus();
+  }catch(e){aviso(e.message||'Não deu para gerar o cartão.')}
+  finally{if(bt)bt.disabled=false}
+}
+function fecharCartao(){$('cmodal').hidden=true;document.body.classList.remove('cmodal-on')}
 
 /* ---------- carregar planilhas ---------- */
 function aviso(m){
@@ -494,7 +654,11 @@ $('view').onchange=e=>{if(e.target.id==='disc'){discSel=e.target.value;drawEvo()
 $('q').oninput=renderList;
 $('pass').onchange=()=>{const n=num($('pass').value);if(n!==null&&n>=0){PASS=n;if(tk){renderList();render()}}};
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(tk)drawEvo()},150)});
-addEventListener('keydown',e=>{if(!tk||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)});
+$('cclose').onclick=fecharCartao;
+$('cmodal').onclick=e=>{if(e.target===$('cmodal'))fecharCartao()};
+$('csave').onclick=()=>{if(!cartaoBlob)return;const u=URL.createObjectURL(cartaoBlob),a=document.createElement('a');a.href=u;a.download=cartaoNome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)};
+$('cshare').onclick=async()=>{if(!cartaoBlob)return;try{await navigator.share({files:[new File([cartaoBlob],cartaoNome,{type:'image/png'})],title:'Notas e faltas'})}catch(e){}};
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('cmodal').hidden){fecharCartao();return}if(!$('cmodal').hidden)return;if(!tk||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)});
 </script>
 <script data-goatcounter="https://notasmapao.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body></html>

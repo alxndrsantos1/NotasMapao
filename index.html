@@ -38,6 +38,7 @@ main{overflow:auto;padding:28px;min-width:0}
 .wrap{max-width:980px;margin:0 auto}
 .foot{max-width:980px;margin:32px auto 0;padding:20px 0 4px;border-top:1px solid var(--line);color:var(--mut);font-size:14px;text-align:center}
 .foot strong{color:var(--ink);font-weight:600}
+.foot a{color:var(--acc2);font-weight:600;text-decoration:none}.foot a:hover{text-decoration:underline}
 .top{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .top h2{margin:0;font-size:28px;line-height:1.15;font-weight:800;letter-spacing:-.02em}.top .meta{color:var(--mut);font-size:13px;margin-top:6px}
 .tools{margin-left:auto;display:flex;gap:8px}
@@ -106,7 +107,7 @@ aside select{margin:0 12px 8px}
   <p class="err" id="err"></p>
   <input type="file" id="file" accept=".xlsx,.xls,.xlsm,.ods" multiple hidden>
  </div>
- <div class="foot" style="border:0;margin:0;padding:0">Desenvolvido por <strong>Prof. Alexandre Santos</strong></div>
+ <div class="foot" style="border:0;margin:0;padding:0">Desenvolvido por <strong>Prof. Alexandre Santos</strong> · <a href="https://www.ferramentasdoprofessor.com.br/contato/">Contato</a></div>
 </div>
 <div id="toast" class="toast" hidden></div>
 <div class="app" id="app" hidden>
@@ -119,7 +120,7 @@ aside select{margin:0 12px 8px}
  <button class="b prim" id="add" style="margin:10px 12px 0">Adicionar planilha</button>
  <button class="b" id="novo" style="margin:8px 12px 12px">Limpar tudo</button>
 </aside>
-<main><div class="wrap" id="view"></div><footer class="foot">Desenvolvido por <strong>Prof. Alexandre Santos</strong></footer></main>
+<main><div class="wrap" id="view"></div><footer class="foot">Desenvolvido por <strong>Prof. Alexandre Santos</strong> · <a href="https://www.ferramentasdoprofessor.com.br/contato/">Contato</a></footer></main>
 </div>
 <script>
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
